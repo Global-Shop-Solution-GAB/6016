@@ -1,0 +1,71 @@
+﻿Program.Sub.ScreenSU.Start
+Gui.frmMaint..Create(DashForm)
+Gui.frmMaint..Caption("Parts X Ref Maintenance")
+Gui.frmMaint..Size(11145,7455)
+Gui.frmMaint..MinX(0)
+Gui.frmMaint..MinY(0)
+Gui.frmMaint..Position(0,0)
+Gui.frmMaint..AlwaysOnTop(False)
+Gui.frmMaint..FontName("Tahoma")
+Gui.frmMaint..FontSize(8.25)
+Gui.frmMaint..ControlBox(True)
+Gui.frmMaint..MaxButton(True)
+Gui.frmMaint..MinButton(True)
+Gui.frmMaint..MousePointer(0)
+Gui.frmMaint..Moveable(True)
+Gui.frmMaint..Sizeable(True)
+Gui.frmMaint..ShowInTaskBar(True)
+Gui.frmMaint..TitleBar(True)
+Gui.frmMaint..BarSaveButton(True,False)
+Gui.frmMaint..Event(UnLoad,frmMaint_UnLoad)
+Gui.frmMaint..Event(SaveButtonClick,frmMaint_SaveButtonClick)
+Gui.frmMaint.gsgcPartsEx.Create(GsGridControl)
+Gui.frmMaint.gsgcPartsEx.Enabled(True)
+Gui.frmMaint.gsgcPartsEx.Visible(True)
+Gui.frmMaint.gsgcPartsEx.Zorder(0)
+Gui.frmMaint.gsgcPartsEx.Size(11145,6465)
+Gui.frmMaint.gsgcPartsEx.Position(0,0)
+Gui.frmMaint.gsgcPartsEx.Dock(5)
+Program.Sub.ScreenSU.End
+
+Program.Sub.Preflight.Start
+Program.Sub.Preflight.End
+
+Program.Sub.Main.Start
+f.Intrinsic.Control.Try
+	f.ODBC.Connection!con.opencompanyconnection(60)
+	f.Data.DataTable.CreateFromSQL("dtM","con","SELECT * FROM GAB_6016_X1_PARTS_XREF",true)
+	gui.frmMaint.gsgcPartsEx.DataSource("dtM")
+	gui.frmMaint.gsgcPartsEx.AddGridviewFromDatatable("gvM","dtM")
+	gui.frmMaint.gsgcPartsEx.SetGridviewProperty("gvM","AllowAddRows",true)
+	gui.frmMaint.gsgcPartsEx.SetGridviewProperty("gvM","AllowDeleteRows",true)
+	gui.frmMaint.gsgcPartsEx.SetColumnProperty("gvM","ID","visible","false")
+	gui.frmMaint.gsgcPartsEx.SetColumnProperty("gvM","X1Part","ReadOnly","false")
+	gui.frmMaint.gsgcPartsEx.SetColumnProperty("gvM","X1Part","AllowEdit","True")
+	gui.frmMaint.gsgcPartsEx.SetColumnProperty("gvM","GSSPart","ReadOnly","false")
+	gui.frmMaint.gsgcPartsEx.SetColumnProperty("gvM","GSSPart","AllowEdit","True")
+	gui.frmMaint..Show
+f.Intrinsic.Control.Catch
+	F.Intrinsic.UI.Msgbox(v.Ambient.ErrorDescription)
+	f.Intrinsic.Control.CallSub(frmMaint_UnLoad)
+f.Intrinsic.Control.EndTry
+Program.Sub.Main.End
+
+Program.Sub.frmMaint_UnLoad.Start
+f.ODBC.Connection!con.Close
+f.Intrinsic.Control.End
+Program.Sub.frmMaint_UnLoad.End
+
+Program.Sub.frmMaint_SaveButtonClick.Start
+f.Intrinsic.Control.Try
+	f.Data.DataTable.SaveToDB("dtM","con","GAB_6016_X1_PARTS_XREF","ID",7)
+f.Intrinsic.Control.Catch
+	F.Intrinsic.UI.Msgbox(v.Ambient.ErrorDescription)
+	f.Intrinsic.Control.CallSub(frmMaint_UnLoad)
+f.Intrinsic.Control.EndTry
+Program.Sub.frmMaint_SaveButtonClick.End
+
+Program.Sub.Comments.Start
+${$5$}$3.0.0.0$}$1
+${$6$}$KRoberts$}$20201015081412556$}$SCyhQZic3V3oKWb0oKsKHRmmG0BIwjdooYy3ktoPyOsH7Z4er7DX3dV7or33BeIeJbauQU/FM4YjMcTMMj2Y5Q==
+Program.Sub.Comments.End
