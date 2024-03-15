@@ -1,0 +1,18 @@
+﻿Program.Sub.Preflight.Start
+Program.Sub.Preflight.End
+
+Program.Sub.Main.Start
+Function.Intrinsic.UI.UsePixels ' Allows you to use Pixels instead of Twips throughout
+f.Intrinsic.Control.If(v.Caller.Hook,=,"11010")
+	'Estimating screen
+	v.Passed.000201.Set("X1 Import")
+f.Intrinsic.Control.ElseIf(v.Caller.Hook,=,"12010")
+	'Order Entry
+	v.Passed.000162.Set("X1 Import")
+f.Intrinsic.Control.EndIf
+Program.Sub.Main.End
+
+Program.Sub.Comments.Start
+${$5$}$3.0.0.0$}$1
+${$6$}$KRoberts$}$20201015120445591$}$SCyhQZic3V3oKWb0oKsKHRmmG0BIwjdooYy3ktoPyOtA+UN8bxPQ6/r6QxmYLDyY6ddzzYmE11qIIFl8ZY/g7w==
+Program.Sub.Comments.End
