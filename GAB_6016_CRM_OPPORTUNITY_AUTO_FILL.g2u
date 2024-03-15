@@ -1,0 +1,44 @@
+﻿Program.Sub.Preflight.Start
+Program.Sub.Preflight.End
+
+Program.Sub.Main.Start
+'Hook 51025
+F.Intrinsic.Control.Try
+	F.ODBC.Connection!Con.OpenCompanyConnection(60)
+	
+	v.Local.sStatus.Declare
+	v.Local.sSql.Declare
+	v.Local.iProbID.Declare
+	v.Local.iFunnelID.Declare
+	v.Local.iSeq.Declare
+	v.Local.sFunnel.declare
+	
+	f.Intrinsic.Control.If(v.Passed.CRM-cboOppStatus.Trim,=,"Accepted")	
+		f.Intrinsic.String.Build("SELECT OFUNNEL FROM CRM_OPP_MASTER WHERE OID={0}",v.Passed.CRM-txtOID,v.Local.ssql)
+		f.ODBC.Connection!con.ExecuteAndReturn(v.Local.sSql,v.Local.iFunnelID)
+		
+		f.Intrinsic.String.Build("SELECT SEQ FROM CRM_OPP_FUNNEL WHERE VALUE='{0}'",v.Passed.CRM-cboOppProbability,v.Local.ssql)
+		f.ODBC.Connection!con.ExecuteAndReturn(v.Local.sSql,v.Local.iSeq)
+		
+		f.Intrinsic.String.Build("SELECT ID FROM CRM_OPP_PROB WHERE FUNNELID={0} and PROBABILITY=100",V.local.iFunnelID,v.Local.ssql)
+		f.ODBC.Connection!con.ExecuteAndReturn(v.Local.sSql,v.Local.iProbID)
+		
+		f.Intrinsic.String.Build("UPDATE CRM_OPP_MASTER SET OPROB={0}, OCLOSEDATE='{1}' WHERE OID='{2}'",v.Local.iProbID,v.Ambient.Date.PervasiveDate,V.Passed.CRM-txtOID,v.Local.ssql)
+		f.ODBC.Connection!con.Execute(v.Local.ssql)
+		
+'		v.Passed.CRM-cboOppProbability.Set("Job Secured (100%) (100%)")
+'		v.Passed.CRM-chkOppClose-v.Set("True")
+	f.Intrinsic.Control.EndIf
+	
+	F.ODBC.Connection!Con.Close
+	f.Intrinsic.Control.End
+F.Intrinsic.Control.Catch
+	f.Intrinsic.UI.Msgbox(v.Ambient.ErrorDescription)
+F.Intrinsic.Control.EndTry
+
+Program.Sub.Main.End
+
+Program.Sub.Comments.Start
+${$5$}$3.0.0.0$}$1
+${$6$}$KRoberts$}$20210211101935649$}$SCyhQZic3V3oKWb0oKsKHRmmG0BIwjdokHb7acNQTiWroIQGGR5rwVpzPQ+NFkLP1IfKZ3c3aGdjykx81J0fNw==
+Program.Sub.Comments.End
