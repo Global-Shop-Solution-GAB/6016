@@ -1,0 +1,1190 @@
+﻿Program.Sub.ScreenSU.Start
+
+Program.Sub.ScreenSU.End
+
+Program.Sub.Preflight.Start
+Program.External.Include.Library("6021.lib")
+Program.External.Include.Library("1010.lib")
+v.Global.sFileUpload.Declare
+v.Global.sMasterDir.Declare
+v.Global.sBom.Declare
+v.Global.sBomDesc.Declare
+f.Intrinsic.String.Concat(v.Caller.FilesDir,"\",v.Caller.CompanyCode,"X1WATCH\",v.Global.sMasterDir)
+Program.External.Include.Library("900100.lib")
+Program.Sub.Preflight.End
+
+Program.Sub.Main.Start
+F.Intrinsic.UI.SetBrowserHotTypeAhead(TRUE)
+f.ODBC.Connection!con.opencompanyconnection(60)
+F.Intrinsic.Control.CallSub(OpenFiles)
+Program.Sub.Main.End
+
+Program.Sub.MoveFile.Start
+f.Intrinsic.Control.Try
+	'Helper Variables
+	V.Local.sPath.Declare
+	v.Local.sFile.Declare
+	v.Local.sFileN.Declare
+	v.Local.sDirP.Declare
+	v.Local.bDirE.Declare
+	v.Local.sDateTime.Declare
+	v.Local.ssql.Declare
+	
+	'Create Directory if it does not exist
+	f.Intrinsic.String.Concat(v.Caller.FilesDir,"\",v.Caller.CompanyCode,"X1Watch\",V.Local.sPath)
+	f.Intrinsic.String.Concat(v.Caller.FilesDir,"\",v.Caller.CompanyCode,"X1Watch\Processed\",V.Local.sDirP)
+	f.Intrinsic.File.DirExists(v.Local.sDirP,v.Local.bDirE)
+	f.Intrinsic.Control.If(v.Local.bDirE,=,false)
+		f.Intrinsic.File.CreateDir(v.Local.sDirP)
+	f.Intrinsic.Control.EndIf
+	
+	'Set the filename
+	v.Local.sFile.Set(v.Args.FileName)
+	F.Intrinsic.File.GetFileNameFromFQN(V.Local.sFile,V.LOCAL.sFile)
+	f.Intrinsic.String.Format(v.Ambient.Now,"YYYYMMDD HHNNSS",v.Local.sDateTime)
+	F.Intrinsic.String.Concat(V.Local.sDateTime,V.Local.sFile,v.Local.sFileN)
+	
+	'Copy the file
+	f.Intrinsic.String.Concat(v.Local.sPath,v.Local.sFile,v.Local.sFile)
+	f.Intrinsic.String.Concat(v.Local.sDirP,v.Local.sFileN,v.Local.sFileN)
+	f.Intrinsic.File.CopyFile(v.Local.sFile,v.Local.sFileN)
+	
+	'Delete the file
+	f.Intrinsic.File.DeleteFile(v.Local.sFile)
+	
+	'Insert Record into 
+	f.Intrinsic.String.Build("INSERT INTO GAB_6016_X1_PROCESSED (ITEM, STATUS, FILENAME, USER_PROCESSED) VALUES ('{0}','{1}','{2}','{3}')",v.Args.Item,"Completed",v.Local.sFileN,v.Args.UserID,v.Local.ssql)
+	f.ODBC.Connection!Con.execute(v.Local.ssql)
+	
+f.Intrinsic.Control.Catch
+	f.Intrinsic.String.Build("INSERT INTO GAB_6016_X1_PROCESSED (ITEM, STATUS, FILENAME, USER_PROCESSED) VALUES ('{0}','{1}','{2}','{3}')",v.Args.Item,"Failed",v.Local.sFileN,v.Args.userid,v.Local.ssql)
+	f.ODBC.Connection!con.execute(v.Local.ssql)
+	f.ODBC.Connection!con.Close
+	f.Intrinsic.Control.End
+f.Intrinsic.Control.EndTry
+Program.Sub.MoveFile.End
+
+Program.Sub.OpenFiles.Start
+f.Intrinsic.Control.Try
+	v.Local.sFileList.Declare
+	v.Local.sFiles.Declare
+	V.Local.sFullPathFile.Declare
+	v.Local.sBOMName.Declare
+	v.Local.sType.Declare
+	v.Local.sRet.declare
+	V.Local.sText.Declare
+	v.Local.sExten.Declare
+	v.Local.i.Declare
+	v.Local.bQuoteHead.declare
+	
+	'Create BOM datatable
+	f.Data.Datatable.Create("dtParts",true)
+	f.Data.Datatable.AddColumn("dtParts","JobID","string")
+	f.Data.Datatable.AddColumn("dtParts","Part","string")
+	f.Data.Datatable.AddColumn("dtParts","Desc","string")
+	f.Data.Datatable.AddColumn("dtParts","QTY","float")
+	f.Data.Datatable.AddColumn("dtParts","Notes","string")
+	f.Data.Datatable.AddColumn("dtParts","UM","string")
+	f.Data.Datatable.AddColumn("dtParts","Source","string")
+	f.Data.Datatable.AddColumn("dtParts","Cost","float")
+	f.Data.Datatable.AddColumn("dtParts","Price","float")
+	f.Data.Datatable.AddColumn("dtParts","Sect","string")
+	f.Data.Datatable.AddColumn("dtParts","Seq","string")
+	
+	'Create Router datatable
+	F.Data.DataTable.Create("dtR",true)
+	f.Data.DataTable.AddColumn("dtR","Step","string")
+	f.Data.DataTable.AddColumn("dtR","Time","Float")
+	F.Data.DataView.Create("dtR","dvR")
+	f.Data.Datatable.Create("dtRFinal",true)
+	f.Data.DataTable.AddColumn("dtRFinal","WC","string")
+	f.Data.DataTable.AddColumn("dtRFinal","Time","float")
+	
+	'Open Files
+	f.Intrinsic.File.GetFileList(v.Global.sMasterDir,v.local.sFileList)
+	f.Intrinsic.String.Split(v.Local.sFileList,":",v.Local.sFiles)
+	
+	F.Intrinsic.UI.InvokeWaitDialog("Processing Files...")
+	'Read through all files
+	f.Intrinsic.Control.For(v.Local.i,0,v.Local.sFiles.UBound,1)
+		'Set Variables
+		f.Intrinsic.String.Split(v.Local.sFiles(v.Local.i)," ",v.Local.sRet)
+		f.Intrinsic.string.Replace(v.Local.sRet(0).ucase,".CSV","",v.Global.sBom)
+		F.Intrinsic.String.Replace(V.Global.sBom,"QUOTE_","",v.Global.sBom)
+		v.Local.sBOMName.Set(v.global.sBom)
+		f.Intrinsic.Control.If(v.Local.sRet.UBound,=,0)
+			v.Local.sType.Set("QUOTE")
+			F.Intrinsic.String.IsInString(v.Local.sRet,"_",true,v.Local.bQuoteHead)
+			f.Intrinsic.Control.If(v.Local.bQuoteHead)
+				v.Local.sType.Set("HEADER")
+			f.Intrinsic.Control.EndIf
+		F.Intrinsic.Control.Else
+			v.Local.sType.Set(v.Local.sRet(1))
+		f.Intrinsic.Control.EndIf
+		f.Intrinsic.String.Replace(v.Local.sType.UCase,".CSV","",V.Local.sType)
+		
+		'Start here
+		f.Intrinsic.File.GetExtensionComponent(v.Local.sFiles(v.Local.i),v.Local.sExten)
+		f.Intrinsic.Control.If(v.Local.sExten.ucase,=,"TXT")
+			v.Local.sType.set("PO")
+		f.Intrinsic.Control.EndIf
+		
+		'Create Datatable of the file
+		f.Intrinsic.String.Concat(v.Global.sMasterDir,"\",v.Local.sFiles(v.Local.i),v.Local.sFullPathFile)
+		f.Intrinsic.File.File2String(v.Local.sFullPathFile,v.Local.sText)
+		f.Intrinsic.Control.If(v.DataTable.dtCSV.Exists)
+			f.Data.Datatable.Close("dtCSV")
+		f.Intrinsic.Control.EndIf
+		f.Data.Datatable.CreateFromString("dtCSV",v.Local.sText,"COL1*!*COL2*!*COL3*!*COL4*!*COL5*!*COL6*!*COL7*!*COL8*!*COL9*!*COL10*!*COL11*!*COL12*!*COL13*!*COL14*!*COL15*!*COL16*!*COL17*!*COL18*!*COL19*!*COL20*!*COL21*!*COL22*!*COL23*!*COL24*!*COL25*!*COL26*!*COL27*!*COL28*!*COL29*!*COL30*!*COL31*!*COL32*!*COL33*!*COL34*!*COL35*!*COL36*!*COL37*!*COL38*!*COL39*!*COL40*!*COL41*!*COL42*!*COL43*!*COL44*!*COL45*!*COL46*!*COL47*!*COL48*!*COL49*!*COL50*!*COL51*!*COL52*!*COL53*!*COL54*!*COL55*!*COL56*!*COL57*!*COL58*!*COL59*!*COL60*!*COL61*!*COL62*!*COL63*!*COL64*!*COL65","String*!*String*!*String*!*String*!*String*!*String*!*String*!*String*!*String*!*String*!*String*!*String*!*String*!*String*!*String*!*String*!*String*!*String*!*String*!*String*!*String*!*String*!*String*!*String*!*String*!*String*!*String*!*String*!*String*!*String*!*String*!*String*!*String*!*String*!*String*!*String*!*String*!*String*!*String*!*String*!*String*!*String*!*String*!*String*!*String*!*String*!*String*!*String*!*String*!*String*!*String*!*String*!*String*!*String*!*String*!*String*!*String*!*String*!*String*!*String*!*String*!*String*!*String*!*String*!*String",",",V.Ambient.NewLine,TRUE)
+		
+		'Determine the type
+		f.Intrinsic.Control.SelectCase(v.Local.sType.UCase)
+			f.Intrinsic.Control.Case("HEADER")
+				F.Intrinsic.UI.InvokeWaitDialog("Processing Header...")
+				F.Intrinsic.Control.CallSub(MappingHeader)
+			f.Intrinsic.Control.Case("GLASS")
+				F.Intrinsic.UI.InvokeWaitDialog("Processing Glass...")
+				F.Intrinsic.Control.CallSub(MappingGlass)
+			f.Intrinsic.Control.Case("PROFILE")
+				F.Intrinsic.UI.InvokeWaitDialog("Processing Profiles...")
+				f.Intrinsic.Control.CallSub(MappingProfile)
+			f.Intrinsic.Control.Case("STOCK")
+				F.Intrinsic.UI.InvokeWaitDialog("Processing Hardware/Labour...")
+				F.Intrinsic.Control.CallSub(MappingHardwareLabour)
+			f.Intrinsic.Control.Case("QUOTE")
+				F.Intrinsic.UI.InvokeWaitDialog("Processing FG Parts...")
+				F.Intrinsic.Control.CallSub(MappingAssemblyParts)
+		f.Intrinsic.Control.EndSelect
+		
+		f.Intrinsic.Control.If(v.Local.sType.UCase,<>,"PO")
+			f.Intrinsic.Control.CallSub(MoveFile,"FileName",v.Local.sFullPathFile,"Item",v.Local.sType,"UserId",v.Caller.User)
+		f.Intrinsic.Control.EndIf
+		
+	f.Intrinsic.Control.Next(v.Local.i)
+	
+	f.Intrinsic.UI.InvokeWaitDialog("Uploading Data...")
+	f.Intrinsic.Control.CallSub(Process)
+	
+f.Intrinsic.Control.Catch
+	f.Intrinsic.UI.Msgbox(v.Ambient.ErrorDescription)
+	f.Intrinsic.Control.CallSub(Unload)
+f.Intrinsic.Control.EndTry
+Program.Sub.OpenFiles.End
+
+
+Program.Sub.MappingHeader.Start
+f.Intrinsic.Control.Try
+	'Create Master Part in GSS with Description
+	v.Local.sPart.Declare
+	v.Local.sDesc.Declare
+	v.Local.fPrice.Declare
+	v.Local.sPrice.Declare
+	v.Local.ssql.Declare
+	
+	V.Local.sPart.Set(v.DataTable.dtCSV(1).COL1!FIELDVALTRIM)
+	v.Local.sDesc.Set(v.DataTable.dtCSV(1).COL2!FIELDVALTRIM)
+	f.Intrinsic.String.Replace(v.local.sDesc,v.Ambient.DblQuote,"",v.Local.sDesc)
+	v.Local.fPrice.Set(v.DataTable.dtCSV(1).COL7!FIELDVAL)
+	v.Global.sBomDesc.Set(v.Local.sDesc)
+	
+	f.Global.Inventory.CreatePart(v.Local.sPart,"EA",v.Local.sDesc,"","FG","F","","",v.Local.fPrice,"NOMAINT ")
+	
+	f.Intrinsic.String.Build("UPDATE INVENTORY_MSTR SET DESCRIPTION='{0}', AMT_PRICE='{1}' WHERE PART='{2}'",v.Global.sBomDesc.PSQLFriendly,V.Local.fPrice,v.Local.sPart,v.Local.ssql)
+	f.ODBC.Connection!con.Execute(v.Local.ssql)
+	
+f.Intrinsic.Control.Catch
+	f.Intrinsic.UI.Msgbox(v.Ambient.ErrorDescription)
+	f.Intrinsic.Control.CallSub(Unload)
+f.Intrinsic.Control.EndTry
+Program.Sub.MappingHeader.End
+
+Program.Sub.MappingHardwareLabour.Start
+f.Intrinsic.Control.Try
+	v.Local.j.Declare(long)
+	v.Local.i.declare
+	v.Local.iRet.Declare
+	v.Local.iRet2.Declare
+	V.Local.iRet3.Declare
+	v.local.sSource.Declare
+	v.Local.sValue.Declare
+	v.Local.sUM.Declare
+	v.Local.sPart.Declare
+	v.Local.sRet.Declare
+	v.Local.fQty.Declare
+	v.Local.sQty.Declare
+	v.Local.fCost.Declare
+	v.Local.sCost.Declare
+	v.Local.fUnits.declare
+	V.Local.sUnits.Declare
+	v.Local.fTime.Declare
+	v.Local.sDesc.Declare
+	v.Local.sNotes.Declare
+	v.Local.sSql.Declare
+	v.Local.sWC.Declare
+	v.Local.sMsg.Declare
+	v.Local.bNumber.Declare
+	v.Local.bCompFlag.Declare
+	v.Local.bLabrFlag.Declare
+	V.Local.sPartCheck.Declare
+	v.Local.iRetDollar.Declare
+	
+	
+	F.Intrinsic.Control.For(V.Local.j,31,v.DataTable.dtCSV.RowCount--,1)
+'	
+'		F.Intrinsic.Control.If(V.Local.j,>,215)
+'			F.Intrinsic.Debug.ShowCallerInfo
+'		F.Intrinsic.Control.EndIf
+		'Column 3 is the line item
+		f.Intrinsic.String.Replace(v.DataTable.dtCSV(v.Local.j).COL1!FIELDVALTRIM,V.Ambient.DblQuote,"",V.Local.sValue)
+		
+		'Find the component section first
+		f.Intrinsic.Control.If(v.Local.sValue.UCase,=,"COMPONENT")
+			v.Local.bCompFlag.Set(true)
+		f.Intrinsic.Control.EndIf
+		
+		'Find the component section first
+		f.Intrinsic.Control.If(v.Local.sValue.UCase,=,"GLASS")
+			v.Local.bCompFlag.Set(false)
+		f.Intrinsic.Control.EndIf
+		
+		f.Intrinsic.Control.If(v.Local.sValue.UCase,=,"LINER")
+			v.Local.bCompFlag.Set(true)
+		f.Intrinsic.Control.EndIf
+		
+		f.Intrinsic.Control.If(v.Local.sValue.UCase,=,"LABOUR")
+			v.Local.bLabrFlag.Set(true)
+			V.Local.bCompFlag.Set(false)
+		f.Intrinsic.Control.EndIf
+		
+		f.Intrinsic.Control.If(v.Local.sValue.UCase,=,"SUNDRY COMPONENT")
+			v.Local.bLabrFlag.Set(false)
+			v.Local.bCompFlag.Set(true)
+		f.Intrinsic.Control.EndIf
+		
+		f.Intrinsic.Control.If(v.Local.sValue.UCase,=,"SUNDRY PROFILE")
+			v.Local.bLabrFlag.Set(false)
+			v.Local.bCompFlag.Set(true)
+		f.Intrinsic.Control.EndIf
+		
+		
+		'F180
+		'F190
+		'Add Labour lines in datatable
+		f.Intrinsic.String.Instr(v.Local.sValue.UCase,"SUBTOTAL",0,V.Local.IRET)
+		f.Intrinsic.String.Instr(v.Local.sValue.UCase,"COST",0,V.Local.IRET2)
+		f.Intrinsic.String.Instr(v.Local.sValue.UCase,"AMOUNT",0,V.Local.IRET3)
+		F.Intrinsic.Control.If(v.Local.iret,<=,0)
+		F.Intrinsic.Control.AndIf(V.Local.iRet2,<=,0)
+		F.Intrinsic.Control.AndIf(V.Local.iRet3,<=,0)
+			'Check if part exists in exclusion list
+			v.Local.sPart.Set(v.DataTable.dtCSV(v.Local.j).COL1!FIELDVALTRIM)
+			F.Intrinsic.String.Replace(v.Local.sPart,v.Ambient.DblQuote,"",v.Local.sPart)
+			f.Intrinsic.String.Build("SELECT * FROM GAB_6016_X1_PARTS_EXCLUDE WHERE X1PART='{0}'",v.Local.sPart,v.Local.ssql)
+			f.ODBC.Connection!con.ExecuteAndReturn(v.Local.sSql,v.Local.sRet)
+			f.Intrinsic.Control.If(v.Local.sRet.Trim,=,"")
+				f.intrinsic.Control.if(v.Local.bLabrFlag)
+'					v.Local.sPart.Set(v.DataTable.dtCSV(v.Local.j).COL1!FIELDVALTRIM)
+'					F.Intrinsic.String.Replace(v.Local.sPart,v.Ambient.DblQuote,"",v.Local.sPart)
+					f.Intrinsic.Control.If(v.Local.sPart.Trim,<>,"LABOUR")			
+						f.Intrinsic.Control.If(v.Local.sPart.Trim,<>,"")			
+							'Find Qty
+							F.Intrinsic.String.Replace(v.DataTable.dtCSV(v.Local.j).COL22!FIELDVAL,v.Ambient.DblQuote,"",v.Local.sQty)
+							F.Intrinsic.Control.If(V.Local.sQty.Trim,=,"")	
+								F.Intrinsic.String.Replace(v.DataTable.dtCSV(v.Local.j).COL23!FIELDVAL,v.Ambient.DblQuote,"",v.Local.sQty)
+								F.Intrinsic.Control.If(V.Local.sQty.Trim,=,"")	
+									F.Intrinsic.String.Replace(v.DataTable.dtCSV(v.Local.j).COL24!FIELDVAL,v.Ambient.DblQuote,"",v.Local.sQty)
+									F.Intrinsic.Control.If(V.Local.sQty.Trim,=,"")	
+										F.Intrinsic.String.Replace(v.DataTable.dtCSV(v.Local.j).COL25!FIELDVAL,v.Ambient.DblQuote,"",v.Local.sQty)
+										f.Intrinsic.Control.If(v.Local.sQty.Trim,=,"")
+											F.Intrinsic.String.Replace(v.DataTable.dtCSV(v.Local.j).COL26!FIELDVAL,v.Ambient.DblQuote,"",v.Local.sQty)
+											F.Intrinsic.Control.If(v.Local.sQty.Trim,=,"")
+												F.Intrinsic.String.Replace(v.DataTable.dtCSV(v.Local.j).COL27!FIELDVAL,v.Ambient.DblQuote,"",v.Local.sQty)
+												f.Intrinsic.Control.If(v.Local.sQty.Trim,=,"")
+													F.Intrinsic.String.Replace(v.DataTable.dtCSV(v.Local.j).COL28!FIELDVAL,v.Ambient.DblQuote,"",v.Local.sQty)
+													f.Intrinsic.Control.If(v.Local.sQty.Trim,=,"")
+														F.Intrinsic.String.Replace(v.DataTable.dtCSV(v.Local.j).COL29!FIELDVAL,v.Ambient.DblQuote,"",v.Local.sQty)
+														F.Intrinsic.Control.If(V.Local.sQty.Trim,=,"")
+															F.Intrinsic.String.Replace(v.DataTable.dtCSV(v.Local.j).COL30!FIELDVAL,v.Ambient.DblQuote,"",v.Local.sQty)
+														F.Intrinsic.Control.EndIf
+													f.Intrinsic.Control.EndIf
+												f.Intrinsic.Control.EndIf
+											F.Intrinsic.Control.EndIf
+										f.Intrinsic.Control.EndIf
+									F.Intrinsic.Control.EndIf
+								F.Intrinsic.Control.EndIf
+							F.Intrinsic.Control.EndIf
+							
+							f.Intrinsic.Math.IsNumeric(v.Local.sQty,v.Local.bNumber)
+							f.Intrinsic.Control.If(v.Local.bNumber)
+								v.Local.fQty.Set(v.Local.sQty)
+							F.Intrinsic.Control.Else
+								V.Local.fQty.Set(0)
+							f.Intrinsic.Control.EndIf
+						
+							f.Intrinsic.Control.If(v.Local.sPart.Trim,<>,"")
+							f.Intrinsic.Control.AndIf(v.Local.fQty,<>,0)
+								'Grab WC Code
+								f.Intrinsic.String.Build("SELECT WC FROM GAB_6016_X1EXTCENTREDESC WHERE DESCR='{0}'",v.local.sPart.UCase,v.Local.ssql)
+								f.ODBC.Connection!con.ExecuteAndReturn(v.Local.ssql,v.Local.sWC)
+								f.Intrinsic.String.Split(v.Local.sWC,"#$#",v.Local.sWC)																
+								f.Intrinsic.Control.If(v.Local.sWC(0).Trim,<>,"")
+									f.Data.DataTable.AddRow("dtR","Step",v.Local.sWC(0),"Time",v.local.fQty)
+								f.Intrinsic.Control.Else
+									f.Intrinsic.String.Concat(v.Local.sMsg,v.Local.sPart," is missing from cross reference.",v.Ambient.NewLine,v.Local.sMsg)
+								f.Intrinsic.Control.EndIf
+								v.Local.sPart.Set("")
+								v.Local.sDesc.Set("")
+								v.Local.fQty.Set(0)
+							f.Intrinsic.Control.EndIf
+						f.Intrinsic.Control.EndIf
+					f.Intrinsic.Control.EndIf
+				f.Intrinsic.Control.EndIf
+		
+				'Add Part lines to datatable
+				f.Intrinsic.Control.If(v.Local.bCompFlag)
+'					v.Local.sPart.Set(v.DataTable.dtCSV(v.Local.j).COL1!FIELDVALTRIM)
+'					F.Intrinsic.String.Replace(v.Local.sPart,v.Ambient.DblQuote,"",v.Local.sPart)
+					f.Intrinsic.Control.If(v.Local.sPart.Trim,<>,"")
+						f.Intrinsic.Control.If(v.Local.sPart.Trim,<>,"SUNDRY COMPONENT")
+						f.Intrinsic.Control.AndIf(v.Local.sPart.Trim,<>,"LINER")
+						f.Intrinsic.Control.AndIf(v.Local.sPart.Trim,<>,"COMPONENT")
+							'Part check
+							f.Intrinsic.String.left(v.local.sPart,2,v.Local.sPartCheck)
+							f.Intrinsic.Control.If(v.Local.sPartCheck,<>,"JI")
+							F.Intrinsic.Control.AndIf(v.Local.sPartCheck,<>,"MS")
+							F.Intrinsic.Control.AndIf(v.Local.sPartCheck,<>,"PC")
+								'Grab Description
+								F.Intrinsic.String.Replace(v.DataTable.dtCSV(v.Local.j).COL10!FIELDVAL,v.Ambient.DblQuote,"",v.Local.sDesc)
+								f.Intrinsic.Control.If(v.Local.sDesc.Trim,=,"")
+									F.Intrinsic.String.Replace(v.DataTable.dtCSV(v.Local.j).COL11!FIELDVAL,v.Ambient.DblQuote,"",v.Local.sDesc)
+									f.Intrinsic.Control.If(v.Local.sDesc.Trim,=,"")
+										F.Intrinsic.String.Replace(v.DataTable.dtCSV(v.Local.j).COL12!FIELDVAL,v.Ambient.DblQuote,"",v.Local.sDesc)
+										f.Intrinsic.Control.If(v.Local.sDesc.Trim,=,"")
+											F.Intrinsic.String.Replace(v.DataTable.dtCSV(v.Local.j).COL13!FIELDVAL,v.Ambient.DblQuote,"",v.Local.sDesc)
+										f.Intrinsic.Control.EndIf
+									f.Intrinsic.Control.EndIf
+								F.Intrinsic.Control.Endif
+								
+								'Qty
+								F.Intrinsic.String.Replace(v.DataTable.dtCSV(v.Local.j).COL18!FIELDVAL,v.Ambient.DblQuote,"",v.Local.sQty)
+								F.Intrinsic.Control.If(V.Local.sQty.Trim,=,"")	
+									F.Intrinsic.String.Replace(v.DataTable.dtCSV(v.Local.j).COL19!FIELDVAL,v.Ambient.DblQuote,"",v.Local.sQty)
+									F.Intrinsic.Control.If(V.Local.sQty.Trim,=,"")	
+										F.Intrinsic.String.Replace(v.DataTable.dtCSV(v.Local.j).COL20!FIELDVAL,v.Ambient.DblQuote,"",v.Local.sQty)
+										F.Intrinsic.Control.If(V.Local.sQty.Trim,=,"")	
+											F.Intrinsic.String.Replace(v.DataTable.dtCSV(v.Local.j).COL21!FIELDVAL,v.Ambient.DblQuote,"",v.Local.sQty)
+											F.Intrinsic.Control.If(V.Local.sQty.Trim,=,"")
+												F.Intrinsic.String.Replace(v.DataTable.dtCSV(v.Local.j).COL22!FIELDVAL,v.Ambient.DblQuote,"",v.Local.sQty)
+												F.Intrinsic.Control.If(V.Local.sQty.Trim,=,"")	
+													F.Intrinsic.String.Replace(v.DataTable.dtCSV(v.Local.j).COL23!FIELDVAL,v.Ambient.DblQuote,"",v.Local.sQty)
+													F.Intrinsic.Control.If(V.Local.sQty.Trim,=,"")	
+														F.Intrinsic.String.Replace(v.DataTable.dtCSV(v.Local.j).COL24!FIELDVAL,v.Ambient.DblQuote,"",v.Local.sQty)
+														F.Intrinsic.Control.If(V.Local.sQty.Trim,=,"")	
+															F.Intrinsic.String.Replace(v.DataTable.dtCSV(v.Local.j).COL25!FIELDVAL,v.Ambient.DblQuote,"",v.Local.sQty)
+															f.Intrinsic.Control.If(v.Local.sQty.Trim,=,"")
+																F.Intrinsic.String.Replace(v.DataTable.dtCSV(v.Local.j).COL26!FIELDVAL,v.Ambient.DblQuote,"",v.Local.sQty)
+																F.Intrinsic.Control.If(v.Local.sQty.Trim,=,"")
+																	F.Intrinsic.String.Replace(v.DataTable.dtCSV(v.Local.j).COL27!FIELDVAL,v.Ambient.DblQuote,"",v.Local.sQty)
+																	f.Intrinsic.Control.If(v.Local.sQty.Trim,=,"")
+																		F.Intrinsic.String.Replace(v.DataTable.dtCSV(v.Local.j).COL28!FIELDVAL,v.Ambient.DblQuote,"",v.Local.sQty)
+																		f.Intrinsic.Control.If(v.Local.sQty.Trim,=,"")
+																			F.Intrinsic.String.Replace(v.DataTable.dtCSV(v.Local.j).COL29!FIELDVAL,v.Ambient.DblQuote,"",v.Local.sQty)
+																			f.Intrinsic.Control.If(v.Local.sQty.Trim,=,"")
+																				F.Intrinsic.String.Replace(v.DataTable.dtCSV(v.Local.j).COL30!FIELDVAL,v.Ambient.DblQuote,"",v.Local.sQty)
+																				F.Intrinsic.Control.If(V.Local.sQty.Trim,=,"")
+																					F.Intrinsic.String.Replace(v.DataTable.dtCSV(v.Local.j).COL31!FIELDVAL,v.Ambient.DblQuote,"",v.Local.sQty)
+																					F.Intrinsic.Control.If(V.Local.sQty.Trim,=,"")
+																						F.Intrinsic.String.Replace(v.DataTable.dtCSV(v.Local.j).COL32!FIELDVAL,v.Ambient.DblQuote,"",v.Local.sQty)
+																						F.Intrinsic.Control.If(V.Local.sQty.Trim,=,"")
+																							F.Intrinsic.String.Replace(v.DataTable.dtCSV(v.Local.j).COL33!FIELDVAL,v.Ambient.DblQuote,"",v.Local.sQty)
+																						F.Intrinsic.Control.EndIf
+																					F.Intrinsic.Control.EndIf
+																				F.Intrinsic.Control.EndIf
+																			f.Intrinsic.Control.EndIf
+																		f.Intrinsic.Control.EndIf
+																	f.Intrinsic.Control.EndIf
+																F.Intrinsic.Control.EndIf
+															f.Intrinsic.Control.EndIf
+														F.Intrinsic.Control.EndIf
+													F.Intrinsic.Control.EndIf
+												F.Intrinsic.Control.EndIf
+											F.Intrinsic.Control.EndIf
+										F.Intrinsic.Control.EndIf
+									F.Intrinsic.Control.EndIf
+								F.Intrinsic.Control.EndIf
+								f.Intrinsic.String.Instr(v.Local.sQty,"$",0,v.Local.iRetDollar)
+								f.Intrinsic.Control.If(v.Local.iRetDollar,<=,0)
+									f.Intrinsic.Math.IsNumeric(v.Local.sQty,v.Local.bNumber)
+									f.Intrinsic.Control.If(v.Local.bNumber)
+										v.Local.fQty.Set(v.Local.sQty)
+									f.Intrinsic.Control.EndIf
+								f.Intrinsic.Control.Else
+									v.Local.fQty.set(0)
+								f.Intrinsic.Control.EndIf
+								
+								'Check if part needs to be xrefed
+								F.Intrinsic.String.Build("SELECT GSSPART from GAB_6016_X1_PARTS_XREF WHERE X1PART='{0}'",v.Local.sPart,v.Local.sSql)
+								f.ODBC.Connection!con.ExecuteAndReturn(v.Local.sSql,v.local.sret)
+								F.Intrinsic.Control.If(V.Local.sret.Trim,<>,"")
+									V.Local.sPart.Set(V.Local.sret)
+								F.Intrinsic.Control.EndIf
+								
+								'Grab Cost from inventory
+								F.Intrinsic.String.Build("select IFNULL(IF(AMT_ALT_COST=0,AMT_COST,0),0) FROM V_INVENTORY_MSTR WHERE PART='{0}'",v.Local.sPart,v.Local.sSql)
+								f.ODBC.Connection!con.ExecuteAndReturn(v.local.sSql,v.local.fCost)
+								
+								'Grab Description from inventory
+								F.Intrinsic.String.Build("select DESCRIPTION FROM V_INVENTORY_MSTR WHERE PART='{0}'",v.Local.sPart,v.Local.sSql)
+								f.ODBC.Connection!con.ExecuteAndReturn(v.local.sSql,v.local.sDesc)
+								
+								f.Intrinsic.Control.If(v.Local.sPart.Trim,<>,"")
+								F.Intrinsic.Control.AndIf(v.Local.sPart.Trim,<>,"MISC")
+								f.Intrinsic.Control.AndIf(v.Local.fQty,<>,0)
+								'f.Intrinsic.Control.AndIf(v.Local.fCost,<>,0)
+									f.Intrinsic.String.Build("SELECT CODE_SOURCE FROM V_INVENTORY_ALL WHERE PART='{0}'",v.Local.sPart,v.Local.sSql)
+									f.ODBC.Connection!con.ExecuteAndReturn(v.Local.sSql,v.Local.sSource)
+									f.Intrinsic.Control.If(v.Local.sSource.Trim,=,"")
+										v.Local.sSource.Set("J")
+									f.Intrinsic.Control.EndIf
+									f.Intrinsic.String.Build("SELECT UM_INVENTORY FROM V_INVENTORY_ALL WHERE PART='{0}'",v.Local.sPart,v.Local.sSql)
+									f.ODBC.Connection!con.ExecuteAndReturn(v.Local.sSql,v.Local.sUM)
+									f.Intrinsic.Control.If(v.Local.sUM.Trim,=,"")
+										v.Local.sUM.Set("EA")
+									f.Intrinsic.Control.EndIf
+									f.Data.Datatable.AddRow("dtParts","JobID",v.Global.sBom,"Part",v.Local.sPart,"Desc",v.Local.sDesc,"Notes",v.Local.sNotes,"QTY",v.Local.fQty,"UM",V.Local.sUM,"SOURCE",v.Local.sSource,"Cost",v.Local.fCost,"Sect","Hardware")
+								f.Intrinsic.Control.EndIf
+							f.Intrinsic.Control.EndIf
+						f.Intrinsic.Control.EndIf					
+					f.Intrinsic.Control.EndIf
+				f.Intrinsic.Control.EndIf
+				v.Local.sRet.Set("")
+				v.Local.iRet.Set(0)
+				v.Local.sPart.Set("")
+				v.Local.sDesc.Set("")
+				v.Local.sNotes.Set("")
+				v.Local.sUM.Set("")
+				v.Local.fQty.Set(0)
+				v.Local.sSource.Set("")
+				v.Local.fCost.Set(0)
+				v.Local.bNumber.Set(false)
+			f.Intrinsic.Control.EndIf
+		F.Intrinsic.Control.EndIf
+	f.Intrinsic.Control.Next(v.Local.j)
+	
+	f.Intrinsic.Control.If(v.Local.sMsg.Trim,<>,"")
+		f.Intrinsic.UI.Msgbox(v.Local.sMsg)
+	f.Intrinsic.Control.EndIf
+	
+	'Sum the times together 
+	f.Data.DataView.SetSort("dtR","dvR","Step ASC")
+	f.Data.DataView.ToDataTableDistinct("dtR","dvR","dtRI","Step")
+	f.Intrinsic.Control.For(v.Local.i,0,v.DataTable.dtRI.RowCount--,1)
+		f.Intrinsic.String.Build("Step='{0}'",v.DataTable.dtRI(v.Local.i).Step!fieldvaltrim,v.Local.ssql)
+		f.Data.DataTable.Compute("dtR","SUM(TIME)",v.Local.ssql,v.Local.fTime)
+		f.Data.Datatable.AddRow("dtRFinal","WC",v.DataTable.dtRI(v.Local.i).Step!fieldvaltrim,"Time",v.Local.fTime)
+	f.Intrinsic.Control.Next(v.Local.i)
+
+f.Intrinsic.control.Catch
+	f.Intrinsic.UI.Msgbox(v.Ambient.ErrorDescription)
+	f.Intrinsic.Control.CallSub(Unload)
+f.Intrinsic.Control.endtry
+Program.Sub.MappingHardwareLabour.End
+
+Program.Sub.MappingAssemblyParts.Start
+f.Intrinsic.Control.Try
+	v.Local.j.Declare(long)
+	v.Local.jPlusFour.Declare(long)
+	v.local.sValue.Declare
+	v.Local.sCheck.Declare
+	v.Local.sPart.Declare
+	v.Local.sDesc.Declare
+	v.Local.sNumb.Declare
+	v.Local.sType.Declare
+	v.Local.fQty.Declare
+	v.Local.sQty.Declare
+	v.Local.sHeight.Declare
+	v.Local.sWidth.declare
+	v.Local.bNumb.Declare
+	v.Local.fPrice.Declare
+	v.Local.sSource.Declare
+	V.Local.sSource.Set("M")
+	
+	F.Intrinsic.Control.For(V.Local.j,1,v.DataTable.dtCSV.RowCount--,1)
+		f.Intrinsic.String.Replace(v.DataTable.dtCSV(v.Local.j).COL2!FIELDVALTRIM,V.Ambient.DblQuote,"",v.Local.sDesc)
+		v.Local.sNumb.Set(v.DataTable.dtCSV(v.Local.j).COL1!FIELDVALTRIM)
+		v.Local.sType.Set(v.DataTable.dtCSV(v.Local.j).COL4!FIELDVALTRIM)
+		f.Intrinsic.Control.If(v.Local.sDesc.Trim,<>,"")
+		f.Intrinsic.Control.AndIf(V.Local.sNumb.Trim,<>,"")
+		F.Intrinsic.Control.AndIf(V.Local.sType.Trim,<>,"MISC")
+'			v.Local.sHeight.Set(v.DataTable.dtCSV(v.Local.j).COL3!FIELDVALTRIM)
+'			v.Local.sWidth.Set(v.DataTable.dtCSV(v.Local.j).COL4!FIELDVALTRIM)
+			v.Local.fPrice.Set(v.DataTable.dtCSV(v.local.j).COL5!FIELDVAL)
+			f.Intrinsic.String.Replace(v.Local.sNumb,"#","",v.Local.sNumb)
+			F.Intrinsic.String.LPad(V.Local.sNumb,"0",2,V.Local.sNumb)
+			f.Intrinsic.String.Concat(v.Global.sBom,"",v.Local.sNumb,v.Local.sPart)
+
+			f.Data.Datatable.AddRow("dtParts","JobID",v.Global.sBom,"Part",v.Local.sPart,"Desc",v.Local.sDesc,"Notes","","QTY",1,"UM","EA","SOURCE",v.Local.sSource,"Price",v.Local.fPrice,"Sect","FG")
+		f.Intrinsic.Control.EndIf
+	F.Intrinsic.Control.Next(V.Local.j)
+	f.Data.Datatable.AddColumn("dtParts","Count","Integer",v.Local.j)
+	
+f.Intrinsic.Control.Catch
+	f.Intrinsic.UI.Msgbox(v.Ambient.ErrorDescription)
+	f.Intrinsic.Control.CallSub(Unload)
+f.Intrinsic.Control.EndTry
+Program.Sub.MappingAssemblyParts.End
+
+Program.Sub.MappingProfile.Start
+f.Intrinsic.Control.Try
+	v.Local.j.Declare(long)
+	v.Local.jPlusOne.Declare(long)
+	v.local.sSource.Declare
+	v.Local.sValue.Declare
+	v.Local.sPart.Declare
+	v.Local.fQty.Declare
+	v.Local.fCost.Declare
+	v.Local.sCost.Declare
+	v.Local.fUnits.declare
+	V.Local.sUnits.Declare
+	v.Local.fMM.Declare
+	v.Local.fM.Declare
+	v.Local.sDesc.Declare
+	v.Local.sNotes.Declare
+	v.Local.sSql.Declare
+	V.Local.sret.Declare
+	v.Local.bNumber.Declare
+	v.Local.iret.Declare
+	
+	F.Intrinsic.Control.For(V.Local.j,31,v.DataTable.dtCSV.RowCount--,1)
+		'Column 3 is the line item
+		f.Intrinsic.String.Replace(v.DataTable.dtCSV(v.Local.j).COL3!FIELDVALTRIM,V.Ambient.DblQuote,"",V.Local.sValue)
+		f.Intrinsic.Control.If(v.Local.sValue.trim,=,"")
+			f.Intrinsic.String.Replace(v.DataTable.dtCSV(v.Local.j).COL4!FIELDVALTRIM,V.Ambient.DblQuote,"",V.Local.sValue)
+		f.Intrinsic.Control.EndIf
+		f.Intrinsic.Control.If(v.Local.sValue,<>,"")
+			f.Intrinsic.Math.Add(v.Local.j,1,v.Local.jPlusOne)
+			
+			'Get the MM & Units to get the M qty
+			f.Intrinsic.Math.IsNumeric(v.Local.sValue,v.Local.bNumber)
+			f.Intrinsic.Control.If(v.Local.bNumber)
+				v.Local.fMM.Set(v.Local.sValue)
+				f.Intrinsic.Math.Div(v.Local.fMM,1000,v.Local.fM)
+			f.Intrinsic.Control.EndIf
+			f.Intrinsic.String.Replace(v.DataTable.dtCSV(v.Local.j).COL1!FIELDVALTRIM,v.Ambient.DblQuote,"",v.Local.sUnits)
+			f.Intrinsic.Math.IsNumeric(v.Local.sUnits,v.Local.bNumber)
+			f.Intrinsic.Control.If(v.Local.bNumber)
+				v.Local.fUnits.set(v.Local.sUnits)
+			f.Intrinsic.Control.EndIf
+			f.Intrinsic.math.Mult(v.Local.fM,v.Local.fUnits,v.Local.fQty)
+		
+			'Grab Part, Desc, Notes, Cost
+			f.Intrinsic.String.Replace(v.DataTable.dtCSV(v.Local.jPlusOne).COL1!FIELDVALTRIM,V.Ambient.DblQuote,"",V.Local.sPart)
+
+			'Description / Notes
+			f.Intrinsic.String.Replace(v.DataTable.dtCSV(v.Local.jPlusOne).COL7!FIELDVALTRIM,V.Ambient.DblQuote,"",V.Local.sDesc)
+			f.Intrinsic.String.Instr(v.Local.sDesc,"$",0,v.Local.iret)
+			f.Intrinsic.Control.If(v.Local.iret,>,0)
+				v.Local.sDesc.Set("")
+			f.Intrinsic.Control.EndIf
+			f.Intrinsic.Control.If(v.Local.sDesc.trim,=,"")
+				f.Intrinsic.String.Replace(v.DataTable.dtCSV(v.Local.jPlusOne).COL8!FIELDVALTRIM,V.Ambient.DblQuote,"",V.Local.sDesc)
+				f.Intrinsic.Control.If(v.Local.sDesc.trim,=,"")
+					f.Intrinsic.String.Replace(v.DataTable.dtCSV(v.Local.jPlusOne).COL9!FIELDVALTRIM,V.Ambient.DblQuote,"",V.Local.sDesc)
+				f.Intrinsic.Control.EndIf
+			f.Intrinsic.Control.EndIf
+			f.Intrinsic.String.Concat(v.Local.fUnits," @ ",v.Local.fM,v.Local.sNotes)
+			
+			'Cost
+			F.Intrinsic.String.Replace(V.DataTable.dtCSV(v.Local.j).COL4!FIELDVAL,V.Ambient.DblQuote,"",v.local.sCost)
+			F.Intrinsic.String.Instr(V.Local.sCost,"$",0,V.Local.iret)
+			F.Intrinsic.Control.If(V.Local.iret,=,0)
+				V.Local.sCost.SET("")
+			F.Intrinsic.Control.EndIf
+			f.Intrinsic.Control.If(v.Local.sCost.Trim,=,"")
+				F.Intrinsic.String.Replace(V.DataTable.dtCSV(v.Local.j).COL5!FIELDVAL,V.Ambient.DblQuote,"",v.local.sCost)
+				f.Intrinsic.Control.If(v.Local.sCost.Trim,=,"")
+					F.Intrinsic.String.Replace(V.DataTable.dtCSV(v.Local.j).COL6!FIELDVAL,V.Ambient.DblQuote,"",v.local.sCost)
+					f.Intrinsic.Control.If(v.Local.sCost.Trim,=,"")
+						F.Intrinsic.String.Replace(V.DataTable.dtCSV(v.Local.j).COL7!FIELDVAL,V.Ambient.DblQuote,"",v.local.sCost)
+					f.Intrinsic.Control.EndIf
+				f.Intrinsic.Control.EndIf
+			f.Intrinsic.Control.EndIf
+			
+			f.Intrinsic.String.Replace(v.local.sCost,"$","",v.local.sCost)
+			f.Intrinsic.Math.IsNumeric(v.Local.sCost,v.Local.bNumber)
+			f.Intrinsic.Control.If(v.Local.bNumber)
+				v.Local.fCost.Set(v.Local.sCost)
+			f.Intrinsic.Control.EndIf
+			
+			'Source code check
+			f.Intrinsic.String.Build("SELECT CODE_SOURCE FROM V_INVENTORY_ALL WHERE PART='{0}'",v.Local.sPart,v.Local.sSql)
+			f.ODBC.Connection!CON.ExecuteAndReturn(v.Local.sSql,v.Local.sSource)
+			f.Intrinsic.Control.If(v.Local.sSource.Trim,=,"")
+				v.Local.sSource.Set("J")
+			f.Intrinsic.Control.EndIf
+			
+			'Check if part needs to be xrefed
+			F.Intrinsic.String.Build("SELECT GSSPART from GAB_6016_X1_PARTS_XREF WHERE X1PART='{0}'",v.Local.sPart,v.Local.sSql)
+			f.ODBC.Connection!con.ExecuteAndReturn(v.Local.sSql,v.local.sret)
+			F.Intrinsic.Control.If(V.Local.sret.Trim,<>,"")
+				V.Local.sPart.Set(V.Local.sret)
+			F.Intrinsic.Control.EndIf
+			
+			f.Intrinsic.Control.If(v.Local.sPart.Trim,<>,"")
+				f.Data.Datatable.AddRow("dtParts","JobID",v.Global.sBom,"Part",v.Local.sPart,"Desc",v.Local.sDesc,"Notes",v.Local.sNotes,"QTY",v.Local.fQty,"UM","M","SOURCE",v.Local.sSource,"Cost",v.Local.fCost,"Notes",v.Local.sNotes,"Sect","Profile")
+			f.Intrinsic.Control.EndIf
+			
+			v.Local.sPart.Set("")
+			v.Local.sDesc.Set("")
+			v.Local.sNotes.Set("")
+			v.Local.fQty.Set(0)
+			v.Local.sSource.Set("")
+			v.Local.fMM.Set(0)
+			v.Local.fM.Set(0)
+			v.Local.fUnits.Set(0)
+			v.Local.fCost.Set(0)
+			v.Local.bNumber.Set(false)
+		f.Intrinsic.Control.EndIf
+	f.Intrinsic.Control.Next(v.Local.j)
+	
+f.Intrinsic.control.Catch
+	f.Intrinsic.UI.Msgbox(v.Ambient.ErrorDescription)
+	f.Intrinsic.Control.CallSub(Unload)
+f.Intrinsic.Control.endtry
+Program.Sub.MappingProfile.End
+
+Program.Sub.MappingGlass.Start
+	v.Local.iRet.Declare
+	v.Local.j.Declare(long)
+	V.Local.jPlusOne.Declare(long)
+	v.Local.sPart.Declare
+	v.Local.sQty.Declare
+	v.Local.fQty.Declare
+	v.Local.sCost.Declare
+	v.Local.fCost.Declare
+	v.Local.sNotes.Declare
+	v.Local.sDesc.Declare
+	v.Local.sValue.Declare
+	v.local.sTemp.Declare
+	v.Local.sEval.Declare
+	v.Local.bFound.declare
+	v.Local.bNumber.Declare
+	
+	F.Intrinsic.Control.For(V.Local.j,33,v.DataTable.dtCSV.RowCount--,1)
+		f.Intrinsic.Math.Add(v.Local.j,1,v.Local.jPlusOne)
+		f.Intrinsic.Control.If(v.DataTable.dtCSV(v.Local.j).COL1!FIELDVALTRIM,<>,"","or",v.DataTable.dtCSV(v.Local.j).COL2!FIELDVALTRIM,<>,"",v.DataTable.dtCSV(v.Local.j).COL3!FIELDVALTRIM,<>,"")
+			'Set value to column 1, and evaluate the first 3 chars and find if it is x by x line
+			f.Intrinsic.Control.If(v.DataTable.dtCSV(v.Local.j).COL1!FIELDVALTRIM,<>,"")
+				f.Intrinsic.String.Instr(v.DataTable.dtCSV(v.Local.j).COL1!FIELDVALTRIM," x ",True,v.Local.bFound)
+				f.Intrinsic.String.Replace(v.DataTable.dtCSV(v.Local.j).COL1!FIELDVALTRIM,V.Ambient.DblQuote,"",V.Local.sValue)
+'			f.Intrinsic.Control.Else
+'				f.Intrinsic.String.Instr(v.DataTable.dtCSV(v.Local.j).COL2!FIELDVALTRIM," x ",True,v.Local.bFound)
+'				f.Intrinsic.String.Replace(v.DataTable.dtCSV(v.Local.j).COL2!FIELDVALTRIM,V.Ambient.DblQuote,"",V.Local.sValue)
+			f.Intrinsic.Control.EndIf
+			f.Intrinsic.String.Left(v.Local.sValue,3,V.Local.sEval)
+			
+			'This is the average line
+			f.Intrinsic.Control.If(v.Local.sEval.UCase,=,"AVE")
+				'Grab total cost
+				f.Intrinsic.String.Replace(v.DataTable.dtCSV(v.Local.j).COL13!FIELDVALTRIM,V.Ambient.DblQuote,"",V.Local.sCost)
+				f.Intrinsic.String.Instr(v.Local.sCost,"$",0,v.Local.iret)
+				f.Intrinsic.Control.If(v.Local.iRet,=,0)
+					v.Local.sCost.Set("")
+				f.Intrinsic.Control.endif
+				F.Intrinsic.Control.If(V.Local.sCost.Trim,=,"")
+					f.Intrinsic.String.Replace(v.DataTable.dtCSV(v.Local.j).COL14!FIELDVALTRIM,V.Ambient.DblQuote,"",V.Local.sCost)
+					f.Intrinsic.String.Instr(v.Local.sCost,"$",0,v.Local.iret)
+					f.Intrinsic.Control.If(v.Local.iRet,=,0)
+						v.Local.sCost.Set("")
+					f.Intrinsic.Control.endif
+					f.Intrinsic.Control.if(v.Local.sCost.Trim,=,"")
+						f.Intrinsic.String.Replace(v.DataTable.dtCSV(v.Local.j).COL15!FIELDVALTRIM,V.Ambient.DblQuote,"",V.Local.sCost)
+						f.Intrinsic.String.Instr(v.Local.sCost,"$",0,v.Local.iret)
+						f.Intrinsic.Control.If(v.Local.iRet,=,0)
+							v.Local.sCost.Set("")
+						f.Intrinsic.Control.endif
+						f.Intrinsic.Control.If(v.Local.sCost,=,"")
+							f.Intrinsic.String.Replace(v.DataTable.dtCSV(v.Local.j).COL16!FIELDVALTRIM,V.Ambient.DblQuote,"",V.Local.sCost)	
+							f.Intrinsic.String.Instr(v.Local.sCost,"$",0,v.Local.iret)
+							f.Intrinsic.Control.If(v.Local.iRet,=,0)
+								v.Local.sCost.Set("")
+							f.Intrinsic.Control.endif
+							f.Intrinsic.Control.If(v.Local.sCost,=,"")
+								f.Intrinsic.String.Replace(v.DataTable.dtCSV(v.Local.j).COL17!FIELDVALTRIM,V.Ambient.DblQuote,"",V.Local.sCost)
+								f.Intrinsic.String.Instr(v.Local.sCost,"$",0,v.Local.iret)
+								f.Intrinsic.Control.If(v.Local.iRet,=,0)
+									v.Local.sCost.Set("")
+								f.Intrinsic.Control.endif
+								f.Intrinsic.Control.If(v.Local.sCost,=,"")
+									f.Intrinsic.String.Replace(v.DataTable.dtCSV(v.Local.j).COL18!FIELDVALTRIM,V.Ambient.DblQuote,"",V.Local.sCost)
+									f.Intrinsic.String.Instr(v.Local.sCost,"$",0,v.Local.iret)
+									f.Intrinsic.Control.If(v.Local.iRet,=,0)
+										v.Local.sCost.Set("")
+									f.Intrinsic.Control.endif
+									f.Intrinsic.Control.If(v.Local.sCost,=,"")
+										f.Intrinsic.String.Replace(v.DataTable.dtCSV(v.Local.j).COL19!FIELDVALTRIM,V.Ambient.DblQuote,"",V.Local.sCost)
+										f.Intrinsic.String.Instr(v.Local.sCost,"$",0,v.Local.iret)
+										f.Intrinsic.Control.If(v.Local.iRet,=,0)
+											v.Local.sCost.Set("")
+										f.Intrinsic.Control.endif
+										f.Intrinsic.String.Concat(v.Local.sCost,v.DataTable.dtCSV(v.Local.j).COL20!FIELDVALTRIM,v.Local.sCost)
+										f.Intrinsic.String.replace(v.local.sCost,v.Ambient.DblQuote,"",v.Local.sCost)
+									f.Intrinsic.control.EndIf
+								f.Intrinsic.control.EndIf
+							f.Intrinsic.Control.EndIf	
+						f.Intrinsic.Control.EndIf	
+					f.Intrinsic.Control.EndIf
+				F.Intrinsic.Control.EndIf
+				
+				
+				f.Intrinsic.String.Replace(v.Local.sCost,"$","",v.Local.sCost)
+				f.Intrinsic.Math.IsNumeric(v.local.sCost,v.Local.bNumber)
+				f.Intrinsic.Control.If(v.local.bNumber)
+					v.Local.fCost.Set(v.Local.sCost)
+				f.Intrinsic.Control.EndIf
+				
+				'Grab the quantity
+				f.Intrinsic.String.Replace(v.DataTable.dtCSV(v.Local.j).COL7!FIELDVAL,V.Ambient.DblQuote,"",V.Local.sQty)
+				f.Intrinsic.Control.If(v.Local.sQty,=,"")
+					f.Intrinsic.String.Replace(v.DataTable.dtCSV(v.Local.j).COL8!FIELDVAL,V.Ambient.DblQuote,"",V.Local.sQty)
+					F.Intrinsic.Control.If(V.Local.sQty.Trim,=,"")
+						f.Intrinsic.String.Replace(v.DataTable.dtCSV(v.Local.j).COL9!FIELDVAL,V.Ambient.DblQuote,"",V.Local.sQty)
+						f.Intrinsic.Control.If(v.Local.sQty.Trim,=,"")
+							f.Intrinsic.String.Replace(v.DataTable.dtCSV(v.Local.j).COL10!FIELDVAL,V.Ambient.DblQuote,"",V.Local.sQty)	
+							f.Intrinsic.Control.If(v.Local.sQty.Trim,=,"")
+								f.Intrinsic.String.Replace(v.DataTable.dtCSV(v.Local.j).COL11!FIELDVAL,V.Ambient.DblQuote,"",V.Local.sQty)
+								f.Intrinsic.Control.If(v.Local.sQty.Trim,=,"")
+									f.Intrinsic.String.Replace(v.DataTable.dtCSV(v.Local.j).COL12!FIELDVAL,V.Ambient.DblQuote,"",V.Local.sQty)
+								f.Intrinsic.Control.EndIf
+							f.Intrinsic.Control.EndIf
+						f.Intrinsic.Control.EndIf
+					F.Intrinsic.Control.EndIf
+				f.Intrinsic.Control.EndIf
+				f.Intrinsic.String.UCase(v.Local.sQty,v.Local.sQty)
+				f.Intrinsic.String.Replace(v.Local.sQty,"TOTAL SQM: ","",v.Local.sQty)
+				f.Intrinsic.Math.IsNumeric(v.Local.sQty,v.Local.bNumber)
+				f.Intrinsic.Control.If(v.Local.bNumber)
+					v.Local.fQty.Set(v.Local.sQty)
+				f.Intrinsic.Control.EndIf
+				
+				'Calc Unit Cost
+				f.Intrinsic.Control.If(v.Local.fCost,<>,0)
+				f.Intrinsic.Control.AndIf(v.Local.fQty,<>,0)
+					f.Intrinsic.Math.Div(v.Local.fCost,v.Local.fQty,v.Local.fCost)
+					f.Intrinsic.Math.Round(v.Local.fCost,4,v.Local.fCost)
+				f.Intrinsic.Control.EndIf
+				
+			'This is the quantity line and the reset should take place
+			F.Intrinsic.Control.ElseIf(V.Local.sEval.UCase,=,"QTY")
+				f.Intrinsic.String.Concat(v.Local.sValue," pieces",v.Ambient.NewLine,v.Local.sNotes,v.Local.sNotes)
+				f.Intrinsic.Control.If(v.Local.sPart.Trim,<>,"")
+					f.Data.Datatable.AddRow("dtParts","JobID",v.Global.sBom,"Part",v.Local.sPart,"Desc",v.Local.sDesc,"Notes",v.Local.sNotes,"QTY",v.Local.fQty,"UM","M2","SOURCE","J","Cost",v.Local.fCost,"Sect","Glass")
+				f.Intrinsic.Control.EndIf
+				v.Local.spart.Set("")
+				v.Local.sDesc.Set("")
+				v.Local.sNotes.Set("")
+				v.Local.fQty.Set(0)
+				v.Local.fCost.Set(0)
+				
+			'This is the x by x line
+			f.Intrinsic.Control.ElseIf(v.Local.bFound)
+				'Treat as notes
+				f.Intrinsic.String.Replace(V.DataTable.dtCSV(v.Local.j).COL7!FIELDVALTRIM,v.Ambient.DblQuote,"",v.Local.sTemp)
+				f.Intrinsic.String.Concat(v.Local.sNotes,v.Local.sValue,"    ",v.Local.sTemp,v.Ambient.NewLine,v.Local.sNotes)
+				v.Local.bFound.Set(false)
+			
+			'Treat like a part
+			f.Intrinsic.Control.ElseIf(v.Local.sEval.Trim,<>,"")
+			
+				'Do one more eval to see if it is a real glass part, glass parts begin with a 0 to represent thickness, ex: 05 = 5mm thick.  Incredibly rare there would be a 10mm scenario
+				f.Intrinsic.String.Left(v.Local.sValue,"1",v.Local.sTemp)
+				f.Intrinsic.Control.If(v.Local.sTemp.Trim,=,"0","or",v.Local.sTemp.Trim,=,"A")
+					f.Intrinsic.String.Split(v.Local.sValue.Trim," ",v.Local.sTemp)
+					f.Intrinsic.Control.If(v.Local.sTemp.UBound,=,0)
+						f.Intrinsic.Control.If(v.Local.sValue.UCase,<>,"AVALON")			
+							v.local.sPart.Set(v.Local.sValue)
+							F.Intrinsic.Control.IF(v.DataTable.dtCSV(v.Local.jPlusOne).COL6!FIELDVALTRIM,<>,"")
+								v.Local.sDesc.Set(v.DataTable.dtCSV(v.Local.jPlusOne).COL6!FIELDVALTRIM)
+							F.Intrinsic.Control.ELSEIF(v.DataTable.dtCSV(v.Local.jPlusOne).COL7!FIELDVALTRIM,<>,"")
+								v.Local.sDesc.Set(v.DataTable.dtCSV(v.Local.jPlusOne).COL7!FIELDVALTRIM)
+							F.Intrinsic.Control.ElseIf(v.DataTable.dtCSV(v.Local.jPlusOne).COL8!FIELDVALTRIM,<>,"")
+								v.Local.sDesc.Set(v.DataTable.dtCSV(v.Local.jPlusOne).COL8!FIELDVALTRIM)
+							F.Intrinsic.Control.ElseIf(v.DataTable.dtCSV(v.Local.jPlusOne).COL9!FIELDVALTRIM,<>,"")
+								v.Local.sDesc.Set(v.DataTable.dtCSV(v.Local.jPlusOne).COL9!FIELDVALTRIM)
+							F.Intrinsic.Control.ElseIf(v.DataTable.dtCSV(v.Local.jPlusOne).COL10!FIELDVALTRIM,<>,"")
+								v.Local.sDesc.Set(v.DataTable.dtCSV(v.Local.jPlusOne).COL10!FIELDVALTRIM)
+							F.Intrinsic.Control.ElseIf(v.DataTable.dtCSV(v.Local.jPlusOne).COL11!FIELDVALTRIM,<>,"")
+								v.Local.sDesc.Set(v.DataTable.dtCSV(v.Local.jPlusOne).COL11!FIELDVALTRIM)
+							F.Intrinsic.Control.EndIf
+						f.Intrinsic.Control.EndIf
+						
+						f.Intrinsic.String.Replace(v.Local.sDesc,v.Ambient.DblQuote,"",v.Local.sDesc)
+					f.Intrinsic.Control.EndIf
+					
+				f.Intrinsic.Control.EndIf
+				
+			f.Intrinsic.Control.EndIf
+		f.Intrinsic.Control.EndIf
+	F.Intrinsic.Control.Next(V.Local.j)
+f.Intrinsic.Control.Catch
+	f.Intrinsic.UI.Msgbox(v.Ambient.ErrorDescription)
+	f.Intrinsic.Control.CallSub(Unload)
+f.Intrinsic.Control.EndTry
+Program.Sub.MappingGlass.End
+
+Program.Sub.Process.Start
+f.Intrinsic.Control.Try
+	v.Local.ssql.Declare
+	v.Local.iJobId.Declare
+	V.Local.sPart.Declare
+	v.Local.sDesc.Declare
+	v.Local.sDesc2.Declare
+	v.Local.sDesc3.Declare
+	v.Local.sParent.Declare
+	v.Local.sPL.Declare
+	v.Local.sUM.Declare
+	v.Local.sSeq.Declare
+	v.Local.sSrc.Declare
+	v.Local.sRet.Declare
+	v.Local.sFileName.Declare
+	v.Local.sFileName.Set("BOMHDR.txt")
+	v.Local.sFileDir.Declare
+	v.Local.sWC.Declare
+	v.Local.sNotes.declare
+	v.Local.sParams.Declare
+	v.Local.sCategory.Declare
+	v.Local.sFilePath.Declare
+	v.Local.dDueDate.Declare
+	v.Local.sDueDate.Declare
+	v.Local.sVal.Declare
+	v.Local.sPurchComp.Declare
+	v.Local.sReturnCode.Declare
+	v.Local.bFileLocked.Declare
+	v.Local.i.Declare
+	v.Local.j.Declare(long)
+	v.Local.fQty.Declare
+	v.Local.iCount.Declare
+	v.Local.iTemp.Declare
+	v.Local.iRet.Declare
+	v.Local.iRtrSeq.Declare
+	v.Local.iRtrSeq.Set(800000)
+	v.Local.fTime.Declare
+	v.Local.fCost.Declare
+	v.Local.sRtrSeq.Declare
+	v.Local.iCntRtr.Declare
+	V.Local.sSeqC1.Declare
+	V.Local.sSeqC2.Declare
+	V.Local.sSeqC3.Declare
+	
+	'Get the counters
+	v.local.iCount.Set(v.DataTable.dtParts(0).Count!fieldval)
+	
+	'Add the Parent record		
+	V.Local.sPL.Set("FG")
+	v.Local.sUM.Set("EA")
+	v.Local.sSrc.Set("F")
+	v.Local.sParent.Set(v.Global.sBom)
+	v.Local.sDesc.Set(v.Global.sBom)
+	v.Local.fQty.Set(1)
+	v.Local.sSeq.Set("0000")
+	f.Intrinsic.Date.DateAdd("D",30,v.Ambient.Date,v.Local.dDueDate)
+	
+	f.Global.Inventory.AddPartToBatch(v.Local.sParent,v.Local.sUM,v.Local.sDesc,"",v.Local.sPL,v.Local.sSrc,v.Local.sDesc2,v.Local.sDesc3,0,"NOMAINT")
+	f.Intrinsic.Control.CallSub(uploadBOM,"Part","","Rev","","Qty",v.Local.fQty,"UM",v.Local.sUM,"Desc",v.Local.sDesc,"Vendor","","Category","","Source",v.Local.sSrc,"Parent",V.Local.sParent,"Seq",v.Local.sSeq)
+	
+'	f.Intrinsic.String.Concat(v.Local.sParent,"_PURCH",v.Local.sPurchComp)
+'	f.Intrinsic.Control.CallSub(uploadBOM,"Part","","Rev","","Qty",v.Local.fQty,"UM",v.Local.sUM,"Desc",v.Local.sDesc,"Vendor","","Category","","Source",v.Local.sSrc,"Parent",V.Local.sPurchComp,"Seq",v.Local.sSeq)
+'	f.Intrinsic.Control.CallSub(uploadBOM,"Part",v.local.sPurchComp,"Rev","","Qty",v.Local.fQty,"UM",v.Local.sUM,"Desc",v.Local.sDesc,"Vendor","","Category","PHANTOM","Source","F","Parent",V.Local.sParent,"Seq","0010")	
+
+	'Grab All Finished Good Items, prep part & BOM record			
+	
+	f.Intrinsic.Control.For(v.Local.i,0,v.DataTable.dtParts.RowCount--,1)
+		f.Intrinsic.Math.Add(v.Local.icount,1,v.Local.iCount)
+		f.Intrinsic.String.LPad(v.local.iCount,"0",3,v.Local.sSeq)
+		f.Intrinsic.String.Concat(v.Local.sSeq,"0",v.Local.sSeq)
+		f.Intrinsic.String.Concat(v.Local.sSeq,"1",v.Local.sSeqC1)
+		f.Intrinsic.String.Concat(v.Local.sSeq,"2",v.Local.sSeqC2)
+		f.Intrinsic.String.Concat(v.Local.sSeq,"3",v.Local.sSeqC3)
+		f.Data.Datatable.SetValue("dtParts",v.local.i,"Seq",v.Local.sSeq)
+		v.Local.sPart.Set(v.DataTable.dtParts(v.Local.i).Part!fieldvaltrim)
+		v.Local.sDesc.Set(v.DataTable.dtParts(v.Local.i).Desc!fieldvaltrim)
+		v.Local.fQty.Set(v.DataTable.dtParts(v.Local.i).Qty!fieldval)
+		v.Local.sSrc.Set(v.DataTable.dtParts(v.Local.i).Source!fieldval)
+		v.Local.sUM.Set(v.DataTable.dtParts(v.Local.i).UM!Fieldvaltrim)
+		v.Local.sNotes.Set(v.DataTable.dtParts(v.Local.i).Notes!Fieldvaltrim)
+		v.Local.fCost.Set(v.DataTable.dtParts(v.Local.i).Cost!Fieldval)
+		f.Intrinsic.Control.If(v.Local.sSrc.Trim,=,"M")
+			f.Intrinsic.Control.CallSub(uploadBOM,"Part",V.Local.sPart,"Rev","","Qty",v.Local.fQty,"UM",v.Local.sUM,"Desc",v.Local.sDesc,"Vendor","","Category",v.Local.sCategory,"Source",v.Local.sSrc,"Parent",V.Local.sParent,"Seq",v.Local.sSeq)
+			f.Intrinsic.Control.If(v.Local.sNotes.trim,<>,"")
+				'f.Intrinsic.Control.CallSub(uploadBOMNote,"Parent",v.Local.sParent,"Parent_Seq",v.Local.sSeq,"Parent_ins","00","Text",v.Local.sNotes.PSQLFriendly)
+			f.Intrinsic.Control.EndIf
+		F.Intrinsic.Control.Else
+			f.Intrinsic.Math.Add(v.Local.iCntRtr,100,v.Local.iCntRtr)
+			f.Intrinsic.String.LPad(v.Local.iCntRtr,"0",6,v.Local.sRtrSeq)
+			'f.Intrinsic.Control.CallSub(uploadBOM,"Part",V.Local.sPart,"Rev","","Qty",v.Local.fQty,"UM",v.Local.sUM,"Desc",v.Local.sDesc,"Vendor","","Category",v.Local.sCategory,"Source",v.Local.sSrc,"Parent",V.Local.sPurchComp,"Seq",v.Local.sSeq)
+			f.Data.Datatable.AddRow("6021","RouterNum",v.Local.sParent,"RouterDesc",v.global.sBomDesc,"Seq",v.Local.sRtrSeq,"LineType","M","PartNum",v.Local.sPart,"PartStepDesc",v.Local.sDesc,"RunTimeMatlQty",V.Local.fQty,"UM",v.Local.sUM,"Qty1","1","PL","FG","RateUC",v.Local.fCost)
+			f.Intrinsic.Control.If(v.Local.sNotes.trim,<>,"")
+				f.Intrinsic.Control.CallSub(uploadBOMNote,"Parent",v.Local.sParent,"Parent_Seq",v.Local.sRtrSeq,"Text",v.Local.sNotes.PSQLFriendly)
+			f.Intrinsic.Control.EndIf
+		f.Intrinsic.Control.EndIf
+		
+		f.Intrinsic.Control.if(v.DataTable.dtParts(v.Local.i).Source!fieldvaltrim,=,"F","or",v.DataTable.dtParts(v.Local.i).Source!fieldvaltrim,=,"M")
+			f.Global.Inventory.AddPartToBatch(v.Local.sPart,v.Local.sUM,v.Local.sDesc,"",v.Local.sPL,v.Local.sSrc,"","",0,"NOMAINT")
+		f.Intrinsic.Control.EndIf
+	f.Intrinsic.Control.Next(v.Local.i)
+	f.Global.Inventory.PostPartBatch
+	f.Intrinsic.Control.CallSub(UpdateBOMPart,"Parent",v.Local.sParent)
+	'F.Intrinsic.Debug.ShowCallerInfo
+	
+	'Create BOM
+	F.Intrinsic.String.Concat(V.Caller.FilesDir,"\",V.Local.sFileName,V.local.sFileDir)
+	f.Intrinsic.File.IsFileLocked(v.Local.sFileDir,v.Local.bFileLocked)
+	f.Intrinsic.Control.If(v.Local.bFileLocked,<>,True)
+		f.Intrinsic.File.GetHandle(v.local.iRet)
+		f.Intrinsic.File.OpenForWrite(V.local.sfiledir,v.local.iRet)
+		f.Intrinsic.File.WriteLine(v.Local.iRet,v.global.sfileupload)
+		f.Intrinsic.File.CloseFile(v.Local.iRet)
+	f.Intrinsic.Control.Else
+		F.Intrinsic.UI.Msgbox("Catastrophic Error. BOM file locked. Program & upload will need to be reran, program now exiting.")
+		f.Intrinsic.Control.CallSub(unload)
+	f.Intrinsic.Control.EndIf
+	f.Intrinsic.UI.Sleep(1)
+	F.Global.General.CallWrapperSync(6010,"NS!*!50")
+	'f.Intrinsic.Debug.ShowCallerInfo
+	'f.Intrinsic.Control.CallSub(uploadBOMCost)
+	
+	'Create Router
+	'f.Intrinsic.Debug.ShowCallerInfo
+	'Delete from router table first
+	f.Intrinsic.String.Build("DELETE FROM ROUTER_HEADER WHERE ROUTER='{0}'",v.Global.sBom,v.Local.ssql)
+	f.ODBC.connection!con.Execute(v.Local.ssql)
+	f.Intrinsic.String.Build("DELETE FROM ROUTER_LINE WHERE ROUTER='{0}'",v.Global.sBom,v.Local.ssql)
+	f.ODBC.connection!con.Execute(v.Local.ssql)
+	f.Intrinsic.String.Build("DELETE from ROUTER_XREF where Router='{0}'",v.Global.sBom,v.Local.ssql)
+	f.ODBC.connection!con.Execute(v.Local.ssql)
+	
+	
+	f.Intrinsic.Control.For(v.Local.i,0,v.DataTable.dtRFinal.RowCount--,1)
+		f.Intrinsic.Math.Add(v.local.iRtrSeq,1,v.Local.iRtrSeq)
+		f.Intrinsic.String.Build("SELECT WC_NAME FROM V_WORKCENTERS WHERE MACHINE='{0}'",v.DataTable.dtRFinal(v.Local.i).WC!FIELDVALTRIM,v.Local.ssql)
+		f.ODBC.Connection!con.ExecuteAndReturn(v.Local.ssql,v.Local.sDesc)
+		F.Intrinsic.Control.If(v.DataTable.dtRFinal(v.Local.i).Time!Fieldval,<>,0)
+			F.Intrinsic.Math.Div(v.DataTable.dtRFinal(v.Local.i).Time!Fieldval,60,V.Local.fTime)
+		F.Intrinsic.Control.EndIf
+		f.Intrinsic.String.Build("SELECT standard_cost FROM V_WORKCENTERS WHERE MACHINE='{0}'",v.DataTable.dtRFinal(v.Local.i).WC!Fieldvaltrim,v.Local.SSQL)
+		f.ODBC.Connection!con.ExecuteAndReturn(v.Local.ssql,v.Local.fCost)
+		f.Data.Datatable.AddRow("6021","RouterNum",v.Global.sBom,"Seq",v.Local.iRtrSeq,"LineType","L","WC",v.DataTable.dtRFinal(v.Local.i).WC!Fieldvaltrim,"PartStepDesc",v.Local.sDesc,"RunTimeMatlQty",V.Local.fTime,"UM","HR","Qty1","1","PL","FG","RATEUC",v.Local.fCost)
+		f.Intrinsic.Math.Add(v.local.iRtrSeq,1,v.Local.iRtrSeq)
+		f.Data.Datatable.AddRow("6021","RouterNum",v.Local.sParent,"Seq",v.Local.iRtrSeq,"LineType","C")
+		f.Intrinsic.Math.Add(v.local.iRtrSeq,1,v.Local.iRtrSeq)
+		f.Data.Datatable.AddRow("6021","RouterNum",v.Local.sParent,"Seq",v.Local.iRtrSeq,"LineType","C")
+		f.Intrinsic.Math.Add(v.local.iRtrSeq,1,v.Local.iRtrSeq)
+		f.Data.Datatable.AddRow("6021","RouterNum",v.Local.sParent,"Seq",v.Local.iRtrSeq,"LineType","C")	
+	f.Intrinsic.Control.Next(v.Local.i)
+	'F.Intrinsic.Debug.ShowCallerInfo
+	f.Intrinsic.Math.Add(v.local.iRtrSeq,1,v.Local.iRtrSeq)
+	f.Data.Datatable.AddRow("6021","RouterNum",v.Global.sBom,"Seq",v.Local.iRtrSeq,"LineType","L","WC","8DEL","PartStepDesc","Delivery","RunTimeMatlQty",.1,"UM","HR","Qty1","1","PL","FG","RATEUC",v.Local.fCost)
+	f.Intrinsic.Math.Add(v.local.iRtrSeq,1,v.Local.iRtrSeq)
+	f.Data.Datatable.AddRow("6021","RouterNum",v.Global.sBom,"Seq",v.Local.iRtrSeq,"LineType","L","WC","9STE","PartStepDesc","Site Install","RunTimeMatlQty",.1,"UM","HR","Qty1","1","PL","FG","RATEUC",v.Local.fCost)
+	f.Intrinsic.Control.CallSub(6021Sync)
+	
+	'Run the rebuild BOM index
+	f.Data.DataTable.AddRow("1010","Process","02","BegBOMParent",v.Global.sBom,"EndBOMParent",v.global.sBom,"RefreshDescForParentParts","Y","RefreshDescForRawMatl","Y")
+	f.Intrinsic.Control.CallSub(1010Sync)
+	
+	'Rebuild routers / Fix BMATL
+	f.Intrinsic.String.ConcatCallWrapperArgs(v.Global.sBom,v.Global.sBom,v.Local.sParams)
+	F.Global.General.CallWrapperSync(1001,v.Local.sParams)
+	
+	'Create multi part work order
+'	f.Intrinsic.String.Concat(v.Caller.FilesDir,"\",v.Caller.User,".txt",v.Local.sfilePath)
+'	f.Intrinsic.String.Format(v.Local.dDueDate,"MM/DD/YYYY",v.Local.sDueDate)
+'	f.Intrinsic.String.Concat(v.Global.sBom,"*!*","    ","*!*","  ","*!*",v.Local.sDueDate,"*!*","1",v.Local.sval)
+'	f.Intrinsic.File.String2File(v.Local.sfilePath,v.Local.sval)
+'	f.Global.Callwrapper.New("NEWWO","Manufacturing.CreateWorkOrderFinishedGoodPart")
+'	f.Global.Callwrapper.SetProperty("NEWWO","FileName",v.Local.sfilePath)
+'	f.Global.Callwrapper.Run("NEWWO")
+'	f.Global.Callwrapper.GetProperty("NEWWO","ReturnCode",v.Local.sReturnCode)
+'	
+'	'Grab the work order #
+'	f.Intrinsic.File.File2String(v.Local.sFilePath,v.Local.sRet)
+'	f.Intrinsic.String.Split(v.Local.sRet,"*!*",v.Local.sRet)
+'	f.Data.Datatable.AddRow("900100","WO_NUM",v.Local.sRet(4),"WO_SUF",v.Local.sRet(5),"WO_RPTID","1811")
+'	f.Intrinsic.Control.CallSub(900100ASync)
+	
+	'Create Sales Order?
+	
+	'Create Purchase Order
+	
+f.Intrinsic.Control.Catch
+	f.Intrinsic.UI.Msgbox(v.Ambient.ErrorDescription)
+	f.Intrinsic.Control.CallSub(unload)
+f.Intrinsic.Control.EndTry
+Program.Sub.Process.End
+
+Program.Sub.UpdateBOMPart.Start
+f.Intrinsic.Control.Try
+	v.Local.sSql.Declare
+	f.Intrinsic.String.Build("UPDATE INVENTORY_MSTR SET CODE_BOM='B' WHERE PART='{0}'",v.Args.Parent,v.Local.sSql)
+	f.ODBC.Connection!con.Execute(v.Local.sSql)
+f.Intrinsic.Control.Catch
+	f.Intrinsic.UI.Msgbox(v.Ambient.ErrorDescription)
+	f.Intrinsic.Control.CallSub(unload)
+f.Intrinsic.Control.EndTry
+Program.Sub.UpdateBOMPart.End
+
+Program.Sub.uploadBOMNote.Start
+f.Intrinsic.Control.Try
+	v.Local.ssql.Declare
+	v.Local.sText.Declare
+	v.Local.sret.Declare
+	f.Intrinsic.string.Replace(v.Args.Text,v.Ambient.NewLine,"' + char(13) +  char(10) + '",v.Local.sText)
+	f.Intrinsic.String.Build("SELECT * FROM RTR_SEQ_COMMENTS WHERE RTR_NUMBER='{0}' AND RTR_SEQ='{1}'",V.Args.Parent,v.Args.Parent_Seq,v.Local.ssql)
+	f.ODBC.Connection!con.ExecuteaNDrETURN(v.Local.ssql,v.Local.sret)
+	
+	f.Intrinsic.Control.If(V.Local.sret.Trim,<>,"")
+		f.Intrinsic.String.Build("DELETE FROM RTR_SEQ_COMMENTS WHERE RTR_NUMBER='{0}' AND RTR_SEQ='{1}'",V.Args.Parent,v.Args.Parent_Seq,v.Local.ssql)
+		F.ODBC.Connection!CON.Execute(v.Local.ssql)
+	f.Intrinsic.Control.EndIf
+	
+	f.Intrinsic.String.Build("INSERT INTO RTR_SEQ_COMMENTS VALUES ('{0}','{1}','{2}')",V.Args.Parent,v.Args.Parent_Seq,v.local.sText,v.Local.ssql)
+	f.ODBC.Connection!con.Execute(v.Local.sSql)
+f.Intrinsic.Control.Catch
+	f.Intrinsic.UI.Msgbox(v.Ambient.ErrorDescription)
+	f.Intrinsic.Control.CallSub(unload)
+f.Intrinsic.Control.EndTry
+Program.Sub.uploadBOMNote.end
+
+Program.Sub.uploadBOMCost.Start
+f.Intrinsic.Control.Try
+	v.Local.ssql.Declare
+	v.Local.sParent.Declare
+	v.Local.sSeq.Declare
+	v.Local.fCost.Declare
+	v.Local.i.Declare
+	f.Intrinsic.Control.For(v.Local.i,0,v.DataTable.dtParts.RowCount--,1)
+		v.Local.sParent.Set(v.Global.sBom)
+		v.Local.sSeq.Set(v.DataTable.dtParts(v.Local.i).Seq!fieldvaltrim)
+		v.Local.fCost.Set(v.DataTable.dtParts(v.Local.i).Cost!fieldval)
+		f.Intrinsic.String.Build("UPDATE BOM_MSTR SET COST='{0}' WHERE PARENT='{1}' AND SEQUENCE_BOM='{2}'",v.Local.fCost,v.local.sParent,v.Local.sSeq,v.Local.ssql)
+		f.ODBC.Connection!con.Execute(v.Local.ssql)
+	f.Intrinsic.Control.Next(v.Local.i)
+	
+f.Intrinsic.Control.Catch
+	f.Intrinsic.UI.Msgbox(v.Ambient.ErrorDescription)
+	f.Intrinsic.Control.CallSub(unload)
+f.Intrinsic.Control.EndTry
+Program.Sub.uploadBomCost.end
+
+Program.Sub.uploadBOM.Start
+f.Intrinsic.Control.Try
+	v.Local.sError.Declare(String)
+	V.Local.sLine.Declare(String)
+	V.Local.sParent.Declare(String)
+	V.Local.sPart.Declare(String)
+	V.Local.sSeq.Declare(String)
+	V.Local.sDescription.Declare(String)
+	V.Local.sCount.Declare(String)
+	V.Local.sUM.Declare(String)
+	V.Local.sCategory.Declare(String)
+	V.Local.sSource.Declare(String)
+	V.Local.sMisc.Declare(String)
+	V.Local.iFor.Declare(Long)
+	V.Local.i7.Declare(Long)
+	V.Local.sRev.Declare(String)
+	V.Local.schild.Declare(String)
+	V.Local.sqty.Declare(String)
+	V.Local.spno.Declare(String)
+	V.Local.suom.Declare(String)
+	V.Local.sDesc.Declare(String)
+	V.Local.spad.Declare(String)
+	V.Local.spad1.Declare(String)
+	V.Local.spad2.Declare(String)
+	V.Local.spad3.Declare(String)
+	V.Local.sRMLine.Declare(String)
+	V.Local.sRMParent.Declare(String)
+	v.Local.ssql.Declare(String)
+	V.Local.sVendcode.Declare(String)
+	v.Local.sPL.Declare(string)
+	V.Local.sTempCategory.Declare(String)
+	
+	F.Intrinsic.String.RPad(v.Args.Part," ",20,V.Local.sPart)
+	F.Intrinsic.String.Left(V.Local.sPart,20,V.Local.sPart)
+	
+	'F.Intrinsic.String.RPad(v.Args.Rev," ",3,V.Local.sRev)
+	'F.Intrinsic.String.Left(V.Local.sRev,3,V.Local.sRev)
+	
+	'Parent
+	F.Intrinsic.String.RPad(V.Args.Parent," ",20,V.Local.sParent)
+	F.Intrinsic.String.Concat(v.global.sfileupload,v.Local.sParent,v.global.sfileupload)
+	
+	'Sequences
+	f.Intrinsic.String.LPad(v.args.Seq,"0",4,v.Local.sLine)
+	F.Intrinsic.String.Concat(v.global.sfileupload,v.Local.sLine,v.global.sfileupload)
+	
+	'Quantity
+	Function.Intrinsic.String.Format(v.Args.QTY,"####.0000", V.local.sqty)
+	F.Intrinsic.String.LPad(V.local.sqty,"0",16,V.Local.sqty)
+	F.Intrinsic.String.Concat(v.global.sfileupload,V.Local.sqty,v.global.sfileupload)
+	
+	'Part & Rev put together
+	F.Intrinsic.String.GSSPartString(V.Local.sPart,V.Local.sRev,V.Local.sPart)
+	f.Intrinsic.String.RPad(v.Local.sPart," ",20,v.Local.sPart)
+	F.Intrinsic.String.Concat(v.global.sfileupload,V.Local.sPart,v.global.sfileupload)
+	
+	'UM
+	F.Intrinsic.String.RPad(v.Args.UM," ",2,V.Local.sUM)
+	F.Intrinsic.String.Left(V.Local.sUM,2,V.Local.sUM)
+	F.Intrinsic.String.Concat(v.global.sfileupload,V.Local.sUM,v.global.sfileupload)
+	
+	'Descriptions
+	F.Intrinsic.String.RPad(V.Args.DESC," ",30,V.Local.sdesc)
+	'F.Intrinsic.String.RPad(" "," ",30,V.Local.sdesc)
+	F.Intrinsic.String.Left(V.Local.sdesc,30,V.Local.sdesc)
+	F.Intrinsic.String.Concat(v.global.sfileupload,V.Local.sdesc,v.global.sfileupload)
+	
+	'Free Pad
+	F.Intrinsic.String.RPad(V.Local.spad1," ",113,V.Local.spad1)
+	F.Intrinsic.String.Concat(v.global.sfileupload,V.Local.spad1,v.global.sfileupload)
+	
+	''Vendor Code
+	'F.Intrinsic.String.RPad(v.Args.Vendor," ",6,V.Local.sVendcode)
+	'F.Intrinsic.String.Left(V.Local.sVendcode,6,V.Local.sVendcode)
+	'F.Intrinsic.String.Concat(v.global.sfileupload,V.Local.svendcode,v.global.sfileupload)
+	
+	'Free Pad
+	'F.Intrinsic.String.RPad(V.Local.spad2," ",48,V.Local.spad2)
+	'F.Intrinsic.String.Concat(v.global.sfileupload,V.Local.spad2,v.global.sfileupload)
+	
+	'Category
+	F.Intrinsic.Control.If(V.Args.Category.Trim,=,"PHANTOM")
+		F.Intrinsic.String.Concat(v.global.sfileupload,"P",v.global.sfileupload)
+		'F.Intrinsic.String.Concat(v.global.sfileupload," ",v.global.sfileupload)
+	f.Intrinsic.Control.Else
+		F.Intrinsic.String.Concat(v.global.sfileupload," ",v.global.sfileupload)
+	F.Intrinsic.Control.EndIf
+	
+	'Source
+	F.Intrinsic.String.Concat(v.global.sfileupload,V.args.Source,v.global.sfileupload)
+	
+	'Free Pad
+	F.Intrinsic.String.RPad(V.Local.spad3," ",90,V.Local.spad3)
+	F.Intrinsic.String.Concat(v.global.sfileupload,V.Local.spad3,v.global.sfileupload)
+	
+	f.Intrinsic.String.Concat(v.Global.sfileupload,v.Ambient.NewLine,v.Global.sfileupload)
+f.Intrinsic.Control.Catch
+	f.Intrinsic.UI.Msgbox(v.Ambient.ErrorDescription)
+	f.Intrinsic.Control.CallSub(unload)
+f.Intrinsic.Control.EndTry
+
+Program.Sub.uploadBOM.End
+
+Program.Sub.unload.Start
+f.ODBC.Connection!con.Close
+f.Intrinsic.Control.End
+Program.Sub.unload.End
+
+Program.Sub.Comments.Start
+${$5$}$3.0.0.0$}$1
+${$6$}$KRoberts$}$20210211115825323$}$SCyhQZic3V3oKWb0oKsKHRmmG0BIwjdokHb7acNQTiWroIQGGR5rwZ0JQaVY6H/BmnAsHC+vSFVonfvpWKDZeg==
+Program.Sub.Comments.End
