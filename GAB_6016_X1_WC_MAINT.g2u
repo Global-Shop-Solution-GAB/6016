@@ -1,0 +1,70 @@
+﻿Program.Sub.ScreenSU.Start
+Gui.frmWCMaint..Create(DashForm)
+Gui.frmWCMaint..Caption("X1 Workcentre Maintenance")
+Gui.frmWCMaint..Size(11145,7455)
+Gui.frmWCMaint..MinX(0)
+Gui.frmWCMaint..MinY(0)
+Gui.frmWCMaint..Position(0,0)
+Gui.frmWCMaint..AlwaysOnTop(False)
+Gui.frmWCMaint..FontName("Tahoma")
+Gui.frmWCMaint..FontSize(8.25)
+Gui.frmWCMaint..ControlBox(True)
+Gui.frmWCMaint..MaxButton(True)
+Gui.frmWCMaint..MinButton(True)
+Gui.frmWCMaint..MousePointer(0)
+Gui.frmWCMaint..Moveable(True)
+Gui.frmWCMaint..Sizeable(True)
+Gui.frmWCMaint..ShowInTaskBar(True)
+Gui.frmWCMaint..TitleBar(True)
+Gui.frmWCMaint..BarSaveButton(True,False)
+Gui.frmWCMaint..Event(UnLoad,frmWCMaint_UnLoad)
+Gui.frmWCMaint..Event(SaveButtonClick,frmWCMaint_SaveButtonClick)
+Gui.frmWCMaint.gsgcWC.Create(GsGridControl)
+Gui.frmWCMaint.gsgcWC.Enabled(True)
+Gui.frmWCMaint.gsgcWC.Visible(True)
+Gui.frmWCMaint.gsgcWC.Zorder(0)
+Gui.frmWCMaint.gsgcWC.Size(11145,6465)
+Gui.frmWCMaint.gsgcWC.Position(0,0)
+Gui.frmWCMaint.gsgcWC.Dock(5)
+Program.Sub.ScreenSU.End
+
+Program.Sub.Preflight.Start
+Program.Sub.Preflight.End
+
+Program.Sub.Main.Start
+f.Intrinsic.Control.Try
+	f.ODBC.Connection!con.opencompanyconnection(60)
+	f.Data.DataTable.CreateFromSQL("dtWC","con","SELECT * FROM GAB_6016_X1EXTCENTREDESC",true)
+	GUI.frmWCMaint.gsgcWC.DataSource("dtWC")
+	gui.frmWCMaint.gsgcWC.AddGridviewFromDatatable("gvWC","dtWC")
+	GUI.frmWCMaint.gsgcWC.SetGridviewProperty("gvWC","AllowAddRows",true)
+	GUI.frmWCMaint.gsgcWC.SetGridviewProperty("gvWC","AllowDeleteRows",true)
+	gui.frmWCMaint.gsgcWC.SetColumnProperty("gvWC","ID","visible","false")
+	gui.frmWCMaint.gsgcWC.SetColumnProperty("gvWC","WC","ReadOnly","false")
+	gui.frmWCMaint.gsgcWC.SetColumnProperty("gvWC","WC","AllowEdit","True")
+	gui.frmWCMaint.gsgcWC.SetColumnProperty("gvWC","DESCR","ReadOnly","false")
+	gui.frmWCMaint.gsgcWC.SetColumnProperty("gvWC","DESCR","AllowEdit","True")
+	gui.frmWCMaint..Show
+f.Intrinsic.Control.Catch
+
+f.Intrinsic.Control.EndTry
+Program.Sub.Main.End
+
+Program.Sub.frmWCMaint_UnLoad.Start
+f.ODBC.Connection!con.Close
+f.Intrinsic.Control.End
+Program.Sub.frmWCMaint_UnLoad.End
+
+Program.Sub.frmWCMaint_SaveButtonClick.Start
+f.Intrinsic.Control.Try
+	f.Data.DataTable.SaveToDB("dtWC","con","GAB_6016_X1EXTCENTREDESC","ID",7)
+f.Intrinsic.Control.Catch
+	F.Intrinsic.UI.Msgbox(v.Ambient.ErrorDescription)
+	f.Intrinsic.Control.CallSub(frmWCMaint_UnLoad)
+f.Intrinsic.Control.EndTry
+Program.Sub.frmWCMaint_SaveButtonClick.End
+
+Program.Sub.Comments.Start
+${$5$}$3.0.0.0$}$1
+${$6$}$Globalshop$}$20200920203430999$}$XbGA5Jlbk/pa9e8jvNC+5gB1AWnpDTHqi6JZpvXQRToQzCg5wwaSex9uzlJAtm+D+txmudC1oKgmUANkl6YROA==
+Program.Sub.Comments.End
